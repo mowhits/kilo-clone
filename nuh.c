@@ -7,23 +7,27 @@
 #include <termios.h>
 #include <errno.h>
 
+/*** defines ***/
+
+#define CTRL_KEY(k) ((k) & 0x1f)
+
 /*** data ***/
 
 struct termios orig_termios;
 
 /*** terminal ***/
 
-void die(const char *s){
+void die(const char *s) {
 	perror(s);
 	exit(1);
 }
 
-void disable_raw_mode(){
+void disable_raw_mode() {
 	if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1)
 	       die("tcsetattr");	
 }
 
-void enable_raw_mode(){
+void enable_raw_mode() {
 	if(tcgetattr(STDIN_FILENO, &orig_termios) == -1)
 		die("tcgetattr");
 	atexit(disable_raw_mode);
@@ -52,21 +56,32 @@ void enable_raw_mode(){
 	// TCSAFLUSH discards unread input before applying changes to terminal
 }
 
+char editor_read_key() {
+	int nread;
+	char c;
+	while ((nread = read(STDIN_FILENO, &c, 1)) != -1) {
+	       if (nread == -1 && errno != EAGAIN)
+		       die("read");
+		// Cygwin returns -1 with errno EAGAIN instead of 0 when read() times out. Hence, we ignore EAGAIN as an error.
+	}
+	return c;
+}
+
+void editor_process_keypress() {
+	char c = editor_read_key();
+	switch (c) {
+		case CTRL_KEY('q'):
+			exit(0);
+			break;
+	}	
+}
+
 /*** init ***/
 
-int main(){
+int main() {
 	enable_raw_mode();
 	while (1) {
-		char c = '\0'; // See line 33
-		if(read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN)
-			die("read");
-		// Cygwin returns -1 with errno EAGAIN instead of 0 when read() times out. Hence, we ignore EAGAIN as an error.
-		if (iscntrl(c))
-			printf("%d\r\n", c);
-		else
-			printf("%d ('%c')\r\n", c, c);
-		if (c == 'q')
-			break;
+		editor_process_keypress();
 	}
 	return 0;
 }
