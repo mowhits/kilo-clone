@@ -12,9 +12,11 @@
 #define CTRL_KEY(k) ((k) & 0x1f)
 
 /*** data ***/
+struct editor_config {
+	struct termios orig_termios;
+};
 
-struct termios orig_termios;
-
+struct editor_config E;
 /*** terminal ***/
 
 void die(const char *s) {
@@ -25,15 +27,15 @@ void die(const char *s) {
 }
 
 void disable_raw_mode() {
-	if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1)
+	if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1)
 	       die("tcsetattr");	
 }
 
 void enable_raw_mode() {
-	if(tcgetattr(STDIN_FILENO, &orig_termios) == -1)
+	if(tcgetattr(STDIN_FILENO, &E.orig_termios) == -1)
 		die("tcgetattr");
 	atexit(disable_raw_mode);
-	struct termios raw = orig_termios;
+	struct termios raw = E.orig_termios;
 	raw.c_iflag &= ~(BRKINT | IXON | ICRNL | INPCK | ISTRIP); // Input Field
 	raw.c_oflag &= ~(OPOST); // Output Field
 	raw.c_cflag &= ~(CS8); // Control Field
@@ -72,6 +74,13 @@ char editor_read_key() {
 
 /*** output ***/
 
+void editor_draw_rows() {
+	int y;
+	for (y = 0; y < 24; y++) {
+		write(STDOUT_FILENO, "~\r\n", 3);
+	}
+}
+
 void editor_refresh_screen() {
 	write(STDOUT_FILENO, "\x1b[2J", 4);
 	/*
@@ -80,6 +89,8 @@ void editor_refresh_screen() {
 	* <esc>[1J clears screen up to the cursor, <esc>[0J or <esc>[J (default) clears screen from cursor to end.
 	*/
 	write(STDOUT_FILENO, "\x1b[H", 3); // H command positions the cursor taking a (row) and b (column) as arguments, or <esc>[a;bH. <esc>[H or <esc[1;1H positions the cursor at the first row and first column.
+	editor_draw_rows();
+	write(STDOUT_FILENO, "\x1b[H", 3);
 }
 
 /*** input ***/
