@@ -18,6 +18,8 @@ struct termios orig_termios;
 /*** terminal ***/
 
 void die(const char *s) {
+	write(STDOUT_FILENO, "\x1b[2J", 4); // Clear screen at exit
+	write(STDOUT_FILENO, "\x1b[H", 3);	
 	perror(s);
 	exit(1);
 }
@@ -67,12 +69,27 @@ char editor_read_key() {
 	return c;
 }
 
+
+/*** output ***/
+
+void editor_refresh_screen() {
+	write(STDOUT_FILENO, "\x1b[2J", 4);
+	/*
+	* \x1b[ is an escape sequence. Escape sequences instruct the terminal to perform text formatting. 
+	* The J command clears the screen. The argument passed is 2, which clears the entire screen. 
+	* <esc>[1J clears screen up to the cursor, <esc>[0J or <esc>[J (default) clears screen from cursor to end.
+	*/
+	write(STDOUT_FILENO, "\x1b[H", 3); // H command positions the cursor taking a (row) and b (column) as arguments, or <esc>[a;bH. <esc>[H or <esc[1;1H positions the cursor at the first row and first column.
+}
+
 /*** input ***/
 
 void editor_process_keypress() {
 	char c = editor_read_key();
 	switch (c) {
 		case CTRL_KEY('q'):
+			write(STDOUT_FILENO, "\x1b[2J", 4); // Clear screen at exit
+			write(STDOUT_FILENO, "\x1b[H", 3);
 			exit(0);
 			break;
 	}	
@@ -84,6 +101,7 @@ int main() {
 	enable_raw_mode();
 
 	while (1) {
+		editor_refresh_screen();
 		editor_process_keypress();
 	}
 	return 0;
