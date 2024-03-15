@@ -11,7 +11,7 @@
 /*** defines ***/
 
 #define CTRL_KEY(k) ((k) & 0x1f)
-
+#define KC_VERSION "0.0.1"
 /*** data ***/
 struct editor_config {
 	int screenrows;
@@ -146,7 +146,24 @@ void ab_free(struct abuf *ab) {
 void editor_draw_rows(struct abuf *ab) {
 	int y;
 	for (y = 0; y < E.screenrows; y++) {
-		ab_append(ab, "~", 1);
+		if (y == E.screenrows / 3) {
+			char welcome[80];
+			int welcomelen = snprintf(welcome, sizeof(welcome), "Kilo-clone editor -- version %s", KC_VERSION);
+			if (welcomelen > E.screencols)
+				welcomelen = E.screencols;
+			int padding = (E.screencols - welcomelen) / 2;
+			if (padding) {
+				ab_append(ab, "~", 1);
+				padding--;
+			}
+			while(padding--)
+				ab_append(ab, " ", 1);
+			ab_append(ab, welcome, welcomelen);
+		}
+		
+		else
+			ab_append(ab, "~", 1);
+		
 		ab_append(ab, "\x1b[K", 3); // Erase in line
 		if (y < E.screenrows - 1) 
 			ab_append(ab, "\r\n", 2);
@@ -170,7 +187,7 @@ void editor_refresh_screen() {
 	
 	editor_draw_rows(&ab);
 	ab_append(&ab, "\x1b[H", 3);
-	ab_append(&ab, "\x1b[?25l", 6); // Shows Cursor
+	ab_append(&ab, "\x1b[?25h", 6); // Shows Cursor
 	write(STDOUT_FILENO, ab.b, ab.len); // Updates entire screen at once, remove flickering
 	ab_free(&ab);
 }

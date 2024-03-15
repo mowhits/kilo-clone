@@ -1,2 +1,2 @@
-nuh: nuh.c
-	gcc nuh.c -o nuh -Wall
+kc: kilo_clone.c
+	gcc kilo_clone.c -o kilo_clone -Wall
