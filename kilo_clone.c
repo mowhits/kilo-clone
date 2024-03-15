@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <termios.h>
 #include <errno.h>
@@ -116,38 +117,63 @@ int get_window_size(int *rows, int *cols) {
 	}
 }
 
-/*** output ***/
-
-void editor_draw_rows() {
-	int y;
-	for (y = 0; y < E.screenrows; y++) {
-		write(STDOUT_FILENO, "~", 1);
-		if (y < E.screenrows - 1) 
-			write(STDOUT_FILENO, "\r\n", 2);
-		
-	}
-}
-
-void editor_refresh_screen() {
-	write(STDOUT_FILENO, "\x1b[2J", 4);
-	/*
-	* \x1b[ is an escape sequence. Escape sequences instruct the terminal to perform text formatting. 
-	* The J command clears the screen. The argument passed is 2, which clears the entire screen. 
-	* <esc>[1J clears screen up to the cursor, <esc>[0J or <esc>[J (default) clears screen from cursor to end.
-	*/
-	write(STDOUT_FILENO, "\x1b[H", 3); // H command positions the cursor taking a (row) and b (column) as arguments, or <esc>[a;bH. <esc>[H or <esc[1;1H positions the cursor at the first row and first column.
-	editor_draw_rows();
-	write(STDOUT_FILENO, "\x1b[H", 3);
-}
 
 /*** append buffer ***/
 
 struct abuf {
 	char *b;
 	int len;
-}
+};
 
 #define ABUF_INIT {NULL, 0}
+
+void ab_append(struct abuf *ab, const char *s, int len) {
+	char *new = realloc(ab->b, ab->len + len);
+
+	if (new == NULL)
+		return;
+	memcpy(&new[ab->len], s, len);
+	ab->b = new;
+	ab->len += len;
+}
+
+void ab_free(struct abuf *ab) {
+	free(ab -> b);
+}
+
+/*** output ***/
+
+void editor_draw_rows(struct abuf *ab) {
+	int y;
+	for (y = 0; y < E.screenrows; y++) {
+		ab_append(ab, "~", 1);
+		ab_append(ab, "\x1b[K", 3); // Erase in line
+		if (y < E.screenrows - 1) 
+			ab_append(ab, "\r\n", 2);
+	}
+}
+
+void editor_refresh_screen() {
+	struct abuf ab = ABUF_INIT;
+	ab_append(&ab, "\x1b[?25l", 6); // Hides cursor
+
+	/*
+	 * Previously:
+	 * ab_append(&ab, "\x1b[2J", 4); 
+	 * \x1b[ is an escape sequence. Escape sequences instruct the terminal to perform text formatting. 
+	 * The J command clears the screen. The argument passed is 2, which clears the entire screen. 
+	 * <esc>[1J clears screen up to the cursor, <esc>[0J or <esc>[J (default) clears screen from cursor to end.
+	 * It is more optimal to clear each line as we redraw them.
+	 */
+
+	ab_append(&ab, "\x1b[H", 3); // H command positions the cursor taking a (row) and b (column) as arguments, or <esc>[a;bH. <esc>[H or <esc[1;1H positions the cursor at the first row and first column.
+	
+	editor_draw_rows(&ab);
+	ab_append(&ab, "\x1b[H", 3);
+	ab_append(&ab, "\x1b[?25l", 6); // Shows Cursor
+	write(STDOUT_FILENO, ab.b, ab.len); // Updates entire screen at once, remove flickering
+	ab_free(&ab);
+}
 
 /*** input ***/
 
