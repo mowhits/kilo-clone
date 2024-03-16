@@ -75,7 +75,25 @@ char editor_read_key() {
 		       die("read");
 		// Cygwin returns -1 with errno EAGAIN instead of 0 when read() times out. Hence, we ignore EAGAIN as an error.
 	}
-	return c;
+	if (c == '\x1b') {
+		char seq[3];
+		if (read(STDIN_FILENO, &seq[0], 1) != 1)
+			return '\x1b';
+		if (read(STDIN_FILENO, &seq[1], 1) != 1)
+		       	return '\x1b';
+		if (seq[0] == '[') {
+			switch (seq[1]) {
+				case 'A': return 'w';
+				case 'B': return 's';
+				case 'C': return 'd';
+				case 'D': return 'a';
+			}
+		}
+
+		return '\x1b';
+	}
+	else
+		return c;
 }
 
 int get_cursor_position(int *rows, int *cols) {
