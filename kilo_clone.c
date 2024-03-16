@@ -12,8 +12,10 @@
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 #define KC_VERSION "0.0.1"
+
 /*** data ***/
 struct editor_config {
+	int cx, cy; // Cursor position
 	int screenrows;
 	int screencols;
 	struct termios orig_termios;
@@ -184,15 +186,36 @@ void editor_refresh_screen() {
 	 */
 
 	ab_append(&ab, "\x1b[H", 3); // H command positions the cursor taking a (row) and b (column) as arguments, or <esc>[a;bH. <esc>[H or <esc[1;1H positions the cursor at the first row and first column.
-	
 	editor_draw_rows(&ab);
-	ab_append(&ab, "\x1b[H", 3);
+	
+	char buf[32];
+	snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1); // Moves cursor to position
+	ab_append(&ab, buf, strlen(buf));
+
 	ab_append(&ab, "\x1b[?25h", 6); // Shows Cursor
 	write(STDOUT_FILENO, ab.b, ab.len); // Updates entire screen at once, remove flickering
 	ab_free(&ab);
 }
 
 /*** input ***/
+
+void editor_move_cursor(char key) {
+	switch (key) {
+		case 'a':
+			E.cx--;
+			break;
+		case 'd':
+			E.cx++;
+			break;
+		case 'w':
+			E.cy++;
+			break;
+		case 's':
+			E.cy--;
+			break;
+	}
+}
+
 
 void editor_process_keypress() {
 	char c = editor_read_key();
@@ -202,12 +225,20 @@ void editor_process_keypress() {
 			write(STDOUT_FILENO, "\x1b[H", 3);
 			exit(0);
 			break;
+		case 'w':
+		case 'a':
+		case 's':
+		case 'd':
+			editor_move_cursor(c);
+			break;
 	}	
 }
 
 /*** init ***/
 
 void init_editor() {
+	E.cx = 0;
+	E.cy = 0;
 	if (get_window_size(&E.screenrows, &E.screencols) == -1)
 		die("get_window_size");
 }
