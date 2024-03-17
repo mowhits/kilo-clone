@@ -13,6 +13,13 @@
 #define CTRL_KEY(k) ((k) & 0x1f)
 #define KC_VERSION "0.0.1"
 
+enum editor_key {
+	ARROW_LEFT = 1000, // Giving large value to avoid any keypress conflict
+	ARROW_RIGHT,
+	ARROW_UP,
+	ARROW_DOWN
+};
+
 /*** data ***/
 struct editor_config {
 	int cx, cy; // Cursor position
@@ -67,7 +74,7 @@ void enable_raw_mode() {
 	// TCSAFLUSH discards unread input before applying changes to terminal
 }
 
-char editor_read_key() {
+int editor_read_key() {
 	int nread;
 	char c;
 	while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
@@ -83,10 +90,10 @@ char editor_read_key() {
 		       	return '\x1b';
 		if (seq[0] == '[') {
 			switch (seq[1]) {
-				case 'A': return 'w';
-				case 'B': return 's';
-				case 'C': return 'd';
-				case 'D': return 'a';
+				case 'A': return ARROW_UP;
+				case 'B': return ARROW_DOWN;
+				case 'C': return ARROW_RIGHT;
+				case 'D': return ARROW_LEFT;
 			}
 		}
 
@@ -217,36 +224,40 @@ void editor_refresh_screen() {
 
 /*** input ***/
 
-void editor_move_cursor(char key) {
+void editor_move_cursor(int key) {
 	switch (key) {
-		case 'a':
-			E.cx--;
+		case ARROW_LEFT:
+			if (E.cx != 0)
+				E.cx--;
 			break;
-		case 'd':
-			E.cx++;
+		case ARROW_RIGHT:
+			if (E.cx != E.screencols - 1)
+				E.cx++;
 			break;
-		case 'w':
-			E.cy--;
+		case ARROW_UP:
+			if (E.cy != 0)
+				E.cy--;
 			break;
-		case 's':
-			E.cy++;
+		case ARROW_DOWN:
+			if (E.cy != E.screenrows - 1)
+				E.cy++;
 			break;
 	}
 }
 
 
 void editor_process_keypress() {
-	char c = editor_read_key();
+	int c = editor_read_key();
 	switch (c) {
 		case CTRL_KEY('q'):
 			write(STDOUT_FILENO, "\x1b[2J", 4); // Clear screen at exit
 			write(STDOUT_FILENO, "\x1b[H", 3);
 			exit(0);
 			break;
-		case 'w':
-		case 'a':
-		case 's':
-		case 'd':
+		case ARROW_UP:
+		case ARROW_DOWN:
+		case ARROW_LEFT:
+		case ARROW_RIGHT:
 			editor_move_cursor(c);
 			break;
 	}	
