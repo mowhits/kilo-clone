@@ -26,10 +26,17 @@ enum editor_key {
 };
 
 /*** data ***/
+
+typedef struct erow {
+	int size;
+	char *chars;
+} erow;
 struct editor_config {
 	int cx, cy; // Cursor position
 	int screenrows;
 	int screencols;
+	int numrows;
+	erow row;
 	struct termios orig_termios;
 };
 
@@ -172,6 +179,12 @@ int get_window_size(int *rows, int *cols) {
 	}
 }
 
+/*** file i/o ***/
+
+void editor_open {
+	char *line = "Hello, world!";
+	ssize_t 
+}
 
 /*** append buffer ***/
 
@@ -312,6 +325,7 @@ void editor_process_keypress() {
 void init_editor() {
 	E.cx = 0;
 	E.cy = 0;
+	E.numrows = 0;
 	if (get_window_size(&E.screenrows, &E.screencols) == -1)
 		die("get_window_size");
 }
