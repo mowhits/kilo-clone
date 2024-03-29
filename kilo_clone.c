@@ -1,5 +1,7 @@
 /*** includes ***/
-
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
@@ -8,6 +10,8 @@
 #include <termios.h>
 #include <errno.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
+
 /*** defines ***/
 
 #define CTRL_KEY(k) ((k) & 0x1f)
@@ -36,7 +40,7 @@ struct editor_config {
 	int screenrows;
 	int screencols;
 	int numrows;
-	erow row;
+	erow *rows;
 	struct termios orig_termios;
 };
 
@@ -179,11 +183,34 @@ int get_window_size(int *rows, int *cols) {
 	}
 }
 
+void editor_append_row(char *s, size_t len) {
+	E.rows = realloc(E.rows, sizeof(erow)*(E.numrows + 1)); // Appends new row to array dynamically
+
+	int at = E.numrows;
+	E.rows[at].size = len;
+	E.rows[at].chars = malloc(len + 1);
+	memcpy(E.rows[at].chars, s, len);
+	E.numrows++;
+}
+
 /*** file i/o ***/
 
-void editor_open {
-	char *line = "Hello, world!";
-	ssize_t 
+void editor_open(char *filename) {
+	FILE *fp = fopen(filename, "r");
+	if (!fp)
+		die("fopen");
+	char *line = NULL;
+	size_t linecap = 0;
+	ssize_t linelen;
+	while ((linelen = getline(&line, &linecap, fp)) != -1) {
+		while (linelen > 0 && (line[linelen - 1] == '\n' || line[linelen - 1] == '\r'))
+			linelen--;
+		editor_append_row(line, linelen);
+	}
+
+	free(line);
+	fclose(fp);
+
 }
 
 /*** append buffer ***/
@@ -214,27 +241,35 @@ void ab_free(struct abuf *ab) {
 void editor_draw_rows(struct abuf *ab) {
 	int y;
 	for (y = 0; y < E.screenrows; y++) {
-		if (y == E.screenrows / 3) {
-			char welcome[80];
-			int welcomelen = snprintf(welcome, sizeof(welcome), "Kilo-clone editor -- version %s", KC_VERSION);
-			if (welcomelen > E.screencols)
-				welcomelen = E.screencols;
-			int padding = (E.screencols - welcomelen) / 2;
-			if (padding) {
-				ab_append(ab, "~", 1);
-				padding--;
+		if (y >= E.numrows) {
+			if (E.numrows == 0 && y == E.screenrows / 3) {
+				char welcome[80];
+				int welcomelen = snprintf(welcome, sizeof(welcome), "Kilo-clone editor -- version %s", KC_VERSION);
+				if (welcomelen > E.screencols)
+					welcomelen = E.screencols;
+				int padding = (E.screencols - welcomelen) / 2;
+				if (padding) {
+					ab_append(ab, "~", 1);
+					padding--;
+				}
+				while(padding--)
+					ab_append(ab, " ", 1);
+				ab_append(ab, welcome, welcomelen);
 			}
-			while(padding--)
-				ab_append(ab, " ", 1);
-			ab_append(ab, welcome, welcomelen);
+			
+			else
+				ab_append(ab, "~", 1);	
 		}
-		
-		else
-			ab_append(ab, "~", 1);
+		else {
+			int len = E.rows[y].size;
+			if (len > E.screencols) len = E.screencols;
+			ab_append(ab, E.rows[y].chars, len);
+		}
+
 		
 		ab_append(ab, "\x1b[K", 3); // Erase in line
 		if (y < E.screenrows - 1) 
-			ab_append(ab, "\r\n", 2);
+		ab_append(ab, "\r\n", 2);
 	}
 }
 
@@ -253,7 +288,6 @@ void editor_refresh_screen() {
 
 	ab_append(&ab, "\x1b[H", 3); // H command positions the cursor taking a (row) and b (column) as arguments, or <esc>[a;bH. <esc>[H or <esc[1;1H positions the cursor at the first row and first column.
 	editor_draw_rows(&ab);
-	
 	char buf[32];
 	snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1); // Moves cursor to position
 	ab_append(&ab, buf, strlen(buf));
@@ -330,9 +364,11 @@ void init_editor() {
 		die("get_window_size");
 }
 
-int main() {
+int main(int argc, char *argv[]) {
 	enable_raw_mode();
 	init_editor();
+	if (argc >= 2)
+		editor_open(argv[1]);
 	while (1) {
 		editor_refresh_screen();
 		editor_process_keypress();
