@@ -53,5 +53,5 @@ Mkfile.old
 dkms.conf
 
 # Misc
-.swp
-.kate-swp
+*.swp
+*.kate-swp
