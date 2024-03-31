@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <termios.h>
 #include <errno.h>
+#include <stdarg.h>
+#include <time.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 
@@ -47,6 +49,9 @@ struct editor_config {
 	int rowoff; // Row and column offsets for scrolling
 	int coloff;
 	erow *rows;
+	char *filename;
+	char statusmsg[80];
+	time_t statusmsg_time;
 	struct termios orig_termios;
 };
 
@@ -242,6 +247,7 @@ void editor_append_row(char *s, size_t len) {
 /*** file i/o ***/
 
 void editor_open(char *filename) {
+	E.filename = filename;
 	FILE *fp = fopen(filename, "r");
 	if (!fp)
 		die("fopen");
@@ -317,7 +323,6 @@ void editor_draw_rows(struct abuf *ab) {
 					ab_append(ab, " ", 1);
 				ab_append(ab, welcome, welcomelen);
 			}
-			
 			else
 				ab_append(ab, "~", 1);	
 		}
@@ -330,11 +335,42 @@ void editor_draw_rows(struct abuf *ab) {
 			ab_append(ab, &E.rows[filerow].render[E.coloff], len);
 		}
 
-		
 		ab_append(ab, "\x1b[K", 3); // Erase in line
-		if (y < E.screenrows - 1) 
 		ab_append(ab, "\r\n", 2);
 	}
+}
+
+void editor_draw_statusbar(struct abuf *ab) {
+	ab_append(ab, "\x1b[7m" , 4);
+	char status[80], rstatus[80];
+	int len = snprintf(status, sizeof(status), "%.20s - %d lines", E.filename ? E.filename : "[No Name]", E.numrows);
+	int rlen = snprintf(rstatus, sizeof(rstatus), "%d/%d", E.cy + 1, E.numrows);
+
+	if (len > E.screencols)
+		len = E.screencols;
+	ab_append(ab, status, len);
+	while (len < E.screencols) {
+		if (E.screencols - len == rlen) {
+			ab_append(ab, rstatus, rlen);
+			break;
+		}
+		else {
+			ab_append(ab, " " , 1);
+			len++;
+		}
+	}
+
+	ab_append(ab, "\x1b[m", 3);
+	ab_append(ab, "\r\n" , 2);
+}
+
+void editor_draw_messagebar(struct abuf *ab) {
+	ab_append(ab, "\x1b[K", 3);
+	int msglen = strlen(E.statusmsg);
+	if (msglen > E.screencols)
+		msglen = E.screencols;
+	if (msglen && time(NULL) - E.statusmsg_time < 5)
+		ab_append(ab, E.statusmsg, msglen);
 }
 
 void editor_refresh_screen() {
@@ -354,6 +390,8 @@ void editor_refresh_screen() {
 
 	ab_append(&ab, "\x1b[H", 3); // H command positions the cursor taking a (row) and b (column) as arguments, or <esc>[a;bH. <esc>[H or <esc[1;1H positions the cursor at the first row and first column.
 	editor_draw_rows(&ab);
+	editor_draw_statusbar(&ab);
+	editor_draw_messagebar(&ab);
 	char buf[32];
 	snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (E.cy - E.rowoff) + 1, (E.rx - E.coloff) + 1); // Moves cursor to position
 	ab_append(&ab, buf, strlen(buf));
@@ -361,6 +399,14 @@ void editor_refresh_screen() {
 	ab_append(&ab, "\x1b[?25h", 6); // Shows Cursor
 	write(STDOUT_FILENO, ab.b, ab.len); // Updates entire screen at once, remove flickering
 	ab_free(&ab);
+}
+
+void editor_set_statusmsg(const char *fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(E.statusmsg, sizeof(E.statusmsg), fmt, ap);
+	va_end(ap);
+	E.statusmsg_time = time(NULL);
 }
 
 /*** input ***/
@@ -449,8 +495,13 @@ void init_editor() {
 	E.numrows = 0;
 	E.rowoff = 0;
 	E.coloff = 0;
+	E.rows = NULL;
+	E.filename = NULL;
+	E.statusmsg[0] = '\0';
+	E.statusmsg_time = 0;
 	if (get_window_size(&E.screenrows, &E.screencols) == -1)
 		die("get_window_size");
+	E.screenrows -= 2;
 }
 
 int main(int argc, char *argv[]) {
@@ -458,6 +509,9 @@ int main(int argc, char *argv[]) {
 	init_editor();
 	if (argc >= 2)
 		editor_open(argv[1]);
+
+	editor_set_statusmsg("^q to quit");
+
 	while (1) {
 		editor_refresh_screen();
 		editor_process_keypress();
