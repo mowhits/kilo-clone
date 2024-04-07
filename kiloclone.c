@@ -565,7 +565,7 @@ void editor_move_cursor(int key) {
 		case ARROW_RIGHT:
 			if (row && E.cx < row->size)
 				E.cx++;
-			else {
+			else if (E.cy < E.numrows) {
 				E.cy++;
 				E.cx = 0;
 			}
