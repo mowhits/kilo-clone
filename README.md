@@ -9,10 +9,10 @@ make
 ./kc filename
 ```
 
-### future to-dos
+### to-dos
 
 1. search
 2. syntax highlighting
 3. ctrl + arrow key to navigate text
-4. rewrite vim
+4. and lots, lots more. this is a very barebones editor. i will work on adding features when i'm bored.
 
