@@ -1,2 +1,2 @@
-kc: kilo_clone.c
-	gcc kilo_clone.c -o kc -Wall
+kc: kiloclone.c
+	gcc kiloclone.c -o kc -Wall
