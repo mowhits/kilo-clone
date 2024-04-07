@@ -13,6 +13,7 @@
 #include <time.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
+#include <ctype.h>
 
 /*** defines ***/
 
@@ -20,9 +21,14 @@
 #define KC_VERSION "0.0.1"
 #define TAB_STOP 8
 #define QUIT_TIMES 2
+
 /*** prototypes ***/
 
 void editor_set_statusmsg(const char* fmt, ...);
+void editor_refresh_screen();
+char* editor_prompt(char *prompt);
+
+/*** data ***/
 
 enum editor_key {
 	BACKSPACE = 127,
@@ -36,8 +42,6 @@ enum editor_key {
 	END_KEY,
 	DEL_KEY,
 };
-
-/*** data ***/
 
 typedef struct erow {
 	int size;
@@ -264,7 +268,7 @@ void editor_del_row(int at) {
 	if (at < 0 || at >= E.numrows)
 		return;
 	editor_free_row(&E.rows[at]);
-	memmove(&E.rows[at - 1], &E.rows[at], sizeof(erow)*(E.numrows - at - 1));
+	memmove(&E.rows[at], &E.rows[at + 1], sizeof(erow)*(E.numrows - at - 1));
 	E.numrows--;
 	E.dirty++;
 
@@ -365,6 +369,9 @@ char* editor_rows_to_string(int *buflen) {
 void editor_open(char *filename) {
 	E.filename = filename;
 	FILE *fp = fopen(filename, "r");
+
+	// todo : implement creating new file upon passing arg
+
 	if (!fp)
 		die("fopen");
 	char *line = NULL;
@@ -383,8 +390,13 @@ void editor_open(char *filename) {
 }
 
 void editor_save() {
-	if (E.filename == NULL)
-		return;
+	if (E.filename == NULL) {
+		E.filename = editor_prompt("Save as: %s [ESC to cancel]");
+		if (E.filename == NULL) {
+			editor_set_statusmsg("Save aborted");
+			return;
+		}
+	}
 	int len;
 	char *buf = editor_rows_to_string(&len);
 	int fd = open(E.filename, O_RDWR | O_CREAT, 0644); // O_CREAT -> Creates file if it doesn't exist, O_RDWR -> Opens file for reading and writing, 0644 are permissions allowing r/w for owner and r for other users. O_TRUNC could be used, but in case of write fail, the entire file is lost. Hence, we manually truncate the file.
@@ -550,6 +562,48 @@ void editor_set_statusmsg(const char *fmt, ...) {
 }
 
 /*** input ***/
+
+char* editor_prompt(char *prompt) {
+	size_t bufsize = 128;
+	char *buf = malloc(bufsize);
+
+	size_t buflen = 0;
+	buf[0] = '\0';
+
+	while (1) {
+		editor_set_statusmsg(prompt, buf);
+		editor_refresh_screen();
+
+		int c = editor_read_key();
+
+		if (c == DEL_KEY || c == CTRL_KEY('h') || c == BACKSPACE) {
+			if (buflen != 0)
+				buf [--buflen] = '\0';
+		}
+		else if (c == '\x1b') {
+			editor_set_statusmsg("");
+			free(buf);
+			return NULL;
+		}
+
+		else if (c == '\r') {
+			if (buflen != 0) {
+				editor_set_statusmsg("");
+				return buf;
+			}
+		}
+
+		else if (!iscntrl(c) && c < 128) {
+			if (buflen == bufsize - 1) {
+				bufsize *= 2;
+				buf = realloc(buf, bufsize);
+			}
+
+			buf[buflen++] = c;
+			buf[buflen] = '\0';
+		}
+	}
+}
 
 void editor_move_cursor(int key) {
 	erow *row = (E.cy >= E.numrows) ? NULL : &E.rows[E.cy];
